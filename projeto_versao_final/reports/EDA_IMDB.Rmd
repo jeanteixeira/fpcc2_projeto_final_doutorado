@@ -1,0 +1,255 @@
+---
+title: "Análise Exploratória de Dados"
+author: "UFCG - Doutorado em Ciência da Computação / Disciplina: FPCC II / Aluno: Jean Barros"
+output: 
+    html_notebook:
+    df_print: paged
+theme: sandstone
+---
+
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(here)
+library(pscl)
+library(tidymodels)
+library(modelr)
+theme_set(theme_bw())
+
+knitr::opts_chunk$set(tidy = FALSE,
+                      fig.width = 12,
+                      fig.height = 6,
+                      echo = FALSE)
+```
+
+```{r}
+db = read_csv(here("data/data.csv"),
+        col_types = cols(
+          imdb_title_id             = col_character(),
+          year                      = col_integer(),
+          duration                  = col_integer(),
+          reviews_from_users        = col_double(),
+          reviews_from_critics      = col_double(),
+          total_votes               = col_double(),
+          males_allages_avg_vote    = col_double(),
+          males_allages_votes       = col_double(),
+          females_allages_avg_vote  = col_double(),
+          females_allages_votes     = col_double(),
+          us_voters_rating          = col_double(),
+          us_voters_votes           = col_double(),
+          non_us_voters_rating      = col_double(),
+          non_us_voters_votes       = col_double(),
+          weighted_average_vote     = col_double()
+    ))
+```
+
+## Sobre os dados
+
+Os dados utilizados são da base de dados IMDb (Internet Move Database) é uma das maiores base de dados online sobre cinema e tudo o que envolve a indústria do entretenimento. Além de reunir informações sobre artistas e produções, o site também permite que usuários criem listas e avaliem seus filmes favoritos. Link da base: https://www.imdb.com/interfaces/
+
+##### **Amostra dos dados:**
+```{r}
+glimpse(db)
+```
+
+
+
+##### **Dicionário dos dados:**
+Para uma melhor compreensão, na Tabela abaixo temos o dicionário de dados da base utilizada no experimento.
+```
+   VARIÁVEL                 TIPO      DESCRIÇÃO
+$ imdb_title_id            <chr> ID do título no IMDb
+$ year                     <int> Ano de lançamento
+$ duration                 <int> Duração
+$ reviews_from_users       <dbl> Número de comentários de usuários
+$ reviews_from_critics     <dbl> Número de comentários dos críticos
+$ total_votes              <dbl> Total de votos recebidos
+$ males_allages_avg_vote   <dbl> Classificação média de todos os usuários do sexo masculino (todas as idades)
+$ males_allages_votes      <dbl> Número de votos de todos os usuários do sexo masculino (todas as idades)
+$ females_allages_avg_vote <dbl> Classificação média de todos os usuários do sexo feminino (todas as idades)
+$ females_allages_votes    <dbl> Número de votos de todos os usuários do sexo feminino (todas as idades)
+$ us_voters_rating         <dbl> Classificação média de usuários americanos
+$ us_voters_votes          <dbl> Número de votos de usuários americanos
+$ non_us_voters_rating     <dbl> Classificação média de usuários não americanos
+$ non_us_voters_votes      <dbl> Número de votos de usuários não americanos
+$ weighted_average_vote    <dbl> Classificação média ponderada total
+
+```
+---------------
+
+
+##### **Sumário dos dados:**
+
+
+Abaixo podemos ver um sumário dos dados que fazem parte da nossa base. Iremos explorar algumas dessas variaveis antes de iniciar o processo de desenvolvimento dos modelos de classificação.
+```{r}
+summary(db)
+```
+
+
+
+A seguir, a figura abaixo apresenta a distribuição da variável alvo (weighted_average_vote). Aparentemente segue uma distribuição normal mas contém uma cauda longa para a esquerda e algumas ocorrências de dados nas extremidades direita quase próximo a classificação 10. Vale ressaltar que a maior concentração dos dados está entre a classificação 5,0 e 7,5.
+
+```{r}
+db %>% 
+    ggplot(aes(x = weighted_average_vote)) + 
+    #ggtitle("Distribuição da Classificação Média Ponderada Total") + 
+    geom_histogram(binwidth = .1, fill = "lightblue", color = "black") + 
+    geom_rug() +
+    labs(
+         y = "", 
+         x = "Classificação média ponderada total"
+    )
+```
+
+
+Na tabela abaixo podemos conferir que poucos filmes possuem uma classificação média maior/igual a 9.5 e que a maioria foram lançados nos últimos 10 anos.Talvez isso possa indicar que a qualidade dos filmes tiveram uma melhora nesse período.
+
+
+```{r}
+db %>%
+    filter(weighted_average_vote >= 9.5) %>%
+    select(title,weighted_average_vote, year, duration) %>%
+    arrange(desc(weighted_average_vote))
+```
+
+
+Em relação a distribuição da duração dos filmes, ao observar o gráfico abaixo, percebemos que a grande maioria está dentro do que costuma-se ver que seria entre uma hora até cerca de duas horas e meia. Mas, existe uma cauda longa para a extremidade direita indicando filmes que ultrapassam 800 minutos, ou seja, são mais de 13 horas de filme.
+
+```{r}
+db %>% 
+    ggplot(aes(x = duration)) + 
+    #ggtitle("Distribuição da Duração dos Filmes") + 
+    geom_histogram(binwidth = 30, fill = "green", color = "black") + 
+    geom_rug() +
+    labs(
+         y = "", 
+         x = "Duração do filme (minutos)"
+    )
+```
+
+Na Tabela a seguir, podemos identificar os principais filmes com maior tempo de duração que fazem parte da extremidade direita do gráfico anterior, curioso que o maior é recente com lançamento em 2016.
+
+
+```{r}
+db %>%
+    filter(duration > 300) %>% 
+    select(title,duration ,weighted_average_vote, year ) %>%
+    arrange(desc(duration))
+```
+
+
+
+Agora, vamos observar no gráfico abaixo, a distribuição dos dados em relação ao ano de lançamento dos filmes. Podemos perceber a evolução que houve na produção de filmes que foi crescendo de forma exponencial, principalmente a partir dos anos 2000.
+
+
+```{r}
+db %>% 
+    ggplot(aes(x = year)) + 
+    #ggtitle("Distribuição dos Filmes por Ano") + 
+    geom_histogram(binwidth = 1, fill = "grey", color = "black") + 
+    geom_rug() +
+    labs(
+         #y = "", 
+         #x = "Horas Estimadas por Tarefa (decimal)"
+    )
+```
+
+
+A tabela mostra os 10 filmes mais antigos da nossa base de dados, com ano de lançamento anterior a 1915.
+
+
+
+```{r}
+db %>%
+    filter(year < 1915) %>%
+    select(title, year, duration ,weighted_average_vote ) %>%
+    arrange(year)
+```
+
+
+Agora, iremos verificar se existe alguma correlação entre a variável alvo, classificação média ponderada total, e alguma outra variável da base. A escolha será de forma empírica, com base no que os autores acreditam que possa haver uma possível correlação, por exemplo, iremos verificar as variáveis: total\_votes, males\_allages\_avg\_vote e non\_us\_voters\_rating.     
+
+
+Na Figura \ref{fig:cor1}, observamos o gráfico de dispersão entre a variável total de votos e a classificação média dos filmes. Podemos perceber que não existe uma correlação linear entre as variáveis, o coeficiente de correlação de Pearson foi de 0,18.
+
+
+
+
+```{r}
+db %>%
+    ggplot(mapping = aes(x = total_votes, y = weighted_average_vote)) +
+    ggtitle("Horas Estimadas por Tarefa X Prioridade") +
+    geom_jitter(height = .1, alpha = .4, color = "orange") + 
+    labs(
+         y = "", 
+         x = "Horas Estimadas por Tarefa (decimal)"
+    )
+```
+```{r}
+
+db %>% 
+    drop_na() %>%
+    summarise(corr_pearson = cor(total_votes, weighted_average_vote, method = "pearson"))
+
+
+```
+
+
+
+Já na Figura \ref{fig:cor2}, podemos perceber que existe uma correlação positiva e forte entre as variáveis com um coeficiente de correlação de Pearson igual a 0,98.
+
+
+
+
+
+```{r}
+db %>%
+    ggplot(mapping = aes(x = males_allages_avg_vote, y = weighted_average_vote)) +
+    #ggtitle("Horas Estimadas por Tarefa X Prioridade") +
+    geom_jitter(height = .1, alpha = .4, color = "blue") + 
+    labs(
+         y = "", 
+         x = ""
+    )
+```
+
+```{r}
+
+db %>% 
+    drop_na() %>%
+    summarise(corr_pearson = cor(males_allages_avg_vote, weighted_average_vote, method = "pearson"))
+
+
+```
+
+
+
+Nesse caso apresentado pela Figura \ref{fig:cor3}, também é perceptível uma correlação considerável e positiva entre as variáveis analisadas com um coeficiente de correlação de Pearson igual a 0,96.
+
+
+
+```{r}
+db %>%
+    ggplot(mapping = aes(x = non_us_voters_rating, y = weighted_average_vote)) +
+    #ggtitle("Horas Estimadas por Tarefa X Prioridade") +
+    geom_jitter(height = .1, alpha = .4, color = "grey") + 
+    labs(
+         y = "", 
+         x = ""
+    )
+```
+
+
+
+```{r}
+
+db %>% 
+    drop_na() %>%
+    summarise(corr_pearson = cor(non_us_voters_rating, weighted_average_vote, method = "pearson"))
+
+
+```
+
+
+Provavelmente essas variáveis com uma correlação positiva e considerável terão uma influência maior nos modelos preditivos, verificaremos essa hipótese após a execução dos classificadores. A execução se encontra no notebook python também disponibilizado no projeto.
